@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bwsync"
+version = "0.1.0"
+description = "macOS password consolidation engine — sync Chrome, iCloud Keychain, and Google Password Manager into Bitwarden"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "pycryptodome",
+    "textual>=0.40",
+    "click>=8.0",
+    "rich>=13.0",
+    "httpx>=0.25",
+    "openpyxl>=3.1",
+    "msoffcrypto-tool>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+bwsync = "bwsync.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bwsync*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

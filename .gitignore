@@ -1,0 +1,9 @@
+never-push-passwords/
+tmp/
+.DS_Store
+.env
+venv/
+*.egg-info/
+__pycache__/
+*.pyc
+.ruff_cache/

@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────
+# PRE-PUSH PROTECTION HOOK
+# Scans ALL commits being pushed for credential DATA files.
+# Second line of defense — catches anything that somehow passed
+# the pre-commit hook.
+#
+# RULE: code files (.py .sh .md etc.) are NEVER blocked regardless of name.
+#       data files (.csv .json .txt etc.) with credential-sounding names
+#       are ALWAYS blocked.
+#       anything inside never-push-passwords/ is ALWAYS blocked.
+# ─────────────────────────────────────────────────────────────────────
+
+DATA_EXT="(csv|json|txt|tsv|db|sqlite|sqlite3|xml|yaml|yml)"
+
+CREDENTIAL_NAMES=(
+    "password"
+    "passwords"
+    "credential"
+    "credentials"
+    "keychain"
+    "secret"
+    "secrets"
+    "login.data"
+    "login_data"
+)
+
+BLOCKED_DIRS=(
+    "never-push-passwords/"
+)
+
+REMOTE="$1"
+URL="$2"
+found=0
+
+while read local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_sha" == "0000000000000000000000000000000000000000" ]]; then
+        FILES=$(git log --name-only --pretty=format: "$local_sha" | sort -u | grep -v '^$')
+    else
+        FILES=$(git diff --name-only "$remote_sha".."$local_sha")
+    fi
+
+    if [[ -z "$FILES" ]]; then
+        continue
+    fi
+
+    for dir in "${BLOCKED_DIRS[@]}"; do
+        matches=$(echo "$FILES" | grep -iE "^${dir}")
+        if [[ -n "$matches" ]]; then
+            if [[ $found -eq 0 ]]; then
+                echo ""
+                echo "🚨  PUSH BLOCKED — sensitive file(s) found in commits:"
+            fi
+            echo "$matches" | sed 's/^/    /'
+            echo "    Reason: inside protected directory '${dir}'"
+            found=1
+        fi
+    done
+
+    for name in "${CREDENTIAL_NAMES[@]}"; do
+        pattern=".*${name}.*\.${DATA_EXT}$"
+        matches=$(echo "$FILES" | grep -iE "$pattern")
+        if [[ -n "$matches" ]]; then
+            if [[ $found -eq 0 ]]; then
+                echo ""
+                echo "🚨  PUSH BLOCKED — sensitive file(s) found in commits:"
+            fi
+            echo "$matches" | sed 's/^/    /'
+            echo "    Reason: credential data file (matched name pattern '${name}')"
+            found=1
+        fi
+    done
+done
+
+if [[ $found -ne 0 ]]; then
+    echo ""
+    echo "    Remote: $URL"
+    echo ""
+    echo "    This file exists in git history and must be removed before pushing."
+    echo "    See: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository"
+    echo ""
+    echo "    To skip this check (dangerous!):  git push --no-verify"
+    echo ""
+    exit 1
+fi
+
+exit 0

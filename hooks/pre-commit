@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────
+# PRE-COMMIT PROTECTION HOOK
+# Blocks staging of credential DATA files before they enter git history.
+#
+# RULE: code files (.py .sh .md etc.) are NEVER blocked regardless of name.
+#       data files (.csv .json .txt etc.) with credential-sounding names
+#       are ALWAYS blocked.
+#       anything inside never-push-passwords/ is ALWAYS blocked.
+# ─────────────────────────────────────────────────────────────────────
+
+# Extensions that can contain raw credential data
+DATA_EXT="(csv|json|txt|tsv|db|sqlite|sqlite3|xml|yaml|yml)"
+
+# Name patterns that suggest credential content (matched against data files only)
+CREDENTIAL_NAMES=(
+    "password"
+    "passwords"
+    "credential"
+    "credentials"
+    "keychain"
+    "secret"
+    "secrets"
+    "login.data"
+    "login_data"
+)
+
+# Directories that are unconditionally blocked (any file, any extension)
+BLOCKED_DIRS=(
+    "never-push-passwords/"
+)
+
+STAGED=$(git diff --cached --name-only)
+
+if [[ -z "$STAGED" ]]; then
+    exit 0
+fi
+
+found=0
+
+# 1. Block anything inside unconditionally blocked directories
+for dir in "${BLOCKED_DIRS[@]}"; do
+    matches=$(echo "$STAGED" | grep -iE "^${dir}")
+    if [[ -n "$matches" ]]; then
+        if [[ $found -eq 0 ]]; then
+            echo ""
+            echo "🚨  COMMIT BLOCKED — sensitive file(s) detected:"
+        fi
+        echo "$matches" | sed 's/^/    /'
+        echo "    Reason: inside protected directory '${dir}'"
+        found=1
+    fi
+done
+
+# 2. Block data files with credential-sounding names
+#    REQUIRES both a credential name AND a data file extension — never blocks .py/.sh/.md
+for name in "${CREDENTIAL_NAMES[@]}"; do
+    pattern=".*${name}.*\.${DATA_EXT}$"
+    matches=$(echo "$STAGED" | grep -iE "$pattern")
+    if [[ -n "$matches" ]]; then
+        if [[ $found -eq 0 ]]; then
+            echo ""
+            echo "🚨  COMMIT BLOCKED — sensitive file(s) detected:"
+        fi
+        echo "$matches" | sed 's/^/    /'
+        echo "    Reason: credential data file (matched name pattern '${name}')"
+        found=1
+    fi
+done
+
+if [[ $found -ne 0 ]]; then
+    echo ""
+    echo "    These files must never enter git history."
+    echo "    To unstage a file:  git reset HEAD <file>"
+    echo "    To skip this check (dangerous!):  git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+exit 0
